@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,7 +48,29 @@ type GuestbookReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.4/pkg/reconcile
 func (r *GuestbookReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
+
+	// Fetch the Guestbook instance
+	guestbook := &webappv1.Guestbook{}
+	err := r.Client.Get(ctx, req.NamespacedName, guestbook)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// Resource not found, could have been deleted after reconcile request.
+			// Return and don't requeue.
+			log.Info("Guestbook resource not found. Ignoring since object must be deleted.")
+			return ctrl.Result{}, nil
+		}
+		// Error reading the object - requeue the request.
+		log.Error(err, "Failed to get Guestbook")
+		return ctrl.Result{}, err
+	}
+
+	// Log the spec.foo value if it exists
+	if guestbook.Spec.Foo != "" {
+		log.Info("Guestbook created", "Name", guestbook.Name, "Namespace", guestbook.Namespace, "Spec.Foo", guestbook.Spec.Foo)
+	} else {
+		log.Info("Guestbook created with no Spec.Foo value", "Name", guestbook.Name, "Namespace", guestbook.Namespace)
+	}
 
 	// TODO(user): your logic here
 
